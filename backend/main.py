@@ -7,10 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# 🧠 Core App Instance Initialization (Fixed NameError)
 app = FastAPI(title="VolareVision Optimization Engine")
 
-# Configure CORS cross-port connection gates
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,14 +17,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CSV_PATH = os.path.join(os.path.dirname(__file__), "airports.csv")
+# 🧠 Robust, Cloud-Safe Path Resolution
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CSV_PATH = os.path.join(BASE_DIR, "airports.csv")
 
 def load_airports_from_csv():
     airports_db = {}
+    print(f"📦 Attempting to read airport matrix from infrastructure path: {CSV_PATH}")
+    
+    if not os.path.exists(CSV_PATH):
+        print(f"❌ CRITICAL error: '{CSV_PATH}' missing from build container space.")
+        # Minimal production fallback safety line so your API never drops dead entirely
+        return {"JFK": {"name": "New York JFK", "lat": 40.6413, "lon": -73.7781, "demand_factor": 1.4}}
+        
     try:
         with open(CSV_PATH, mode='r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
+                # Standardize database matching key values
                 code = row['code'].strip().upper()
                 airports_db[code] = {
                     "name": row['name'].strip(),
@@ -34,12 +42,12 @@ def load_airports_from_csv():
                     "lon": float(row['lon']),
                     "demand_factor": float(row['demand_factor']) if row.get('demand_factor') else 1.0
                 }
-        print(f"🔥 SUCCESS: Fully loaded {len(airports_db)} infrastructure nodes into global matrix.")
+        print(f"🔥 SUCCESS: Fully loaded {len(airports_db)} real airport nodes into global matrix.")
     except Exception as e:
-        print(f"⚠️ CSV Load Error, booting minimal core array: {e}")
-        airports_db = {"JFK": {"name": "New York", "lat": 40.6413, "lon": -73.7781, "demand_factor": 1.3}}
+        print(f"⚠️ Parsing anomaly caught: {e}")
     return airports_db
 
+# This runs once on cold startup and caches the data in memory for the edge lifecycle
 AIRPORTS = load_airports_from_csv()
 
 # ✈️ ENTERPRISE 20-AIRCRAFT OPERATIONS REGISTRY
