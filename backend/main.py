@@ -217,11 +217,18 @@ def generate_great_circle_path(p1, p2, bend_offset=0.0, segments=40):
         path.append([math.degrees(lat) + wave_offset, math.degrees(lon)])
     return path
 
+@app.get("/")
+@app.get("/api")
+def health():
+    return {"status": "running", "service": "VolareVision Optimization Engine"}
+
 @app.get("/airports")
+@app.get("/api/airports")
 def get_airports():
     return AIRPORTS
 
 @app.post("/optimize")
+@app.post("/api/optimize")
 def optimize_route(req: OptimizationRequest):
     orig, dest = AIRPORTS.get(req.origin.upper()), AIRPORTS.get(req.destination.upper())
     if not orig or not dest:
