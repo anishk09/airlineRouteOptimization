@@ -4,7 +4,9 @@
       {
         "src": "backend/main.py",
         "use": "@vercel/python",
-        "config": { "includeFiles": "backend/requirements.txt" }
+        "config": {
+          "includeFiles": ["backend/airports.csv"]
+        }
       },
       {
         "src": "frontend/**",
