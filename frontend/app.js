@@ -55,7 +55,7 @@ function initMap() {
         maxBounds: [[-85, -190], [85, 190]],
         maxBoundsViscosity: 1.0,
     });
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
         attribution: "&copy; OpenStreetMap &copy; CARTO",
         subdomains: "abcd",
         minZoom: 2.2,
