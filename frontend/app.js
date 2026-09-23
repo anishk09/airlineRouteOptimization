@@ -46,10 +46,20 @@ const FLEET_REGISTRY = {
 // Map bootstrap
 // --------------------------------------------------------------------------
 function initMap() {
-    map = L.map("map", { center: [30, 5], zoom: 3, zoomControl: false, worldCopyJump: true });
+    map = L.map("map", {
+        center: [30, 5],
+        zoom: 3,
+        zoomControl: false,
+        worldCopyJump: true,
+        minZoom: 2.2,
+        maxBounds: [[-85, -190], [85, 190]],
+        maxBoundsViscosity: 1.0,
+    });
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
         attribution: "&copy; OpenStreetMap &copy; CARTO",
-        maxZoom: 19,
+        subdomains: "abcd",
+        minZoom: 2.2,
+        maxZoom: 18,
     }).addTo(map);
     L.control.zoom({ position: "bottomright" }).addTo(map);
 }
@@ -78,6 +88,7 @@ function greatCirclePath([lat1, lon1], [lat2, lon2], bendOffset = 0, segments = 
     if (d === 0) return [[lat1, lon1], [lat2, lon2]];
 
     const path = [];
+    let prevLon = lon1;
     for (let i = 0; i <= segments; i++) {
         const f = i / segments;
         const A = Math.sin((1 - f) * d) / Math.sin(d);
@@ -86,11 +97,29 @@ function greatCirclePath([lat1, lon1], [lat2, lon2], bendOffset = 0, segments = 
         const y = A * Math.cos(phi1) * Math.sin(l1) + B * Math.cos(phi2) * Math.sin(l2);
         const z = A * Math.sin(phi1) + B * Math.sin(phi2);
         const lat = Math.atan2(z, Math.sqrt(x * x + y * y)) * toDeg;
-        const lon = Math.atan2(y, x) * toDeg;
+        let lon = Math.atan2(y, x) * toDeg;
+        // atan2 always returns a value in (-180, 180], so a route whose shortest
+        // path crosses the 180th meridian (e.g. US -> Asia/Pacific) would otherwise
+        // flip sign between consecutive points and render as a line stretched
+        // across the entire map. Unwrap relative to the previous point instead so
+        // the polyline stays continuous along the true shortest-path direction.
+        while (lon - prevLon > 180) lon -= 360;
+        while (lon - prevLon < -180) lon += 360;
+        prevLon = lon;
         const wave = Math.sin(f * Math.PI) * bendOffset;
         path.push([lat + wave, lon]);
     }
     return path;
+}
+
+// Shifts `lon` by ±360 so it sits within 180° of `refLon` — matches the same
+// unwrapping greatCirclePath applies, so a destination marker lines up with
+// the end of its arc instead of sitting a full world-width away from it.
+function unwrapLon(lon, refLon) {
+    let l = lon;
+    while (l - refLon > 180) l -= 360;
+    while (l - refLon < -180) l += 360;
+    return l;
 }
 
 function haversineNM(lat1, lon1, lat2, lon2) {
@@ -319,8 +348,9 @@ document.getElementById("optForm").addEventListener("submit", (e) => {
     optimizerLayers.push(...addFlightArc(data.fuel_route.path, { color: "#10b981", weight: 3 }));
     optimizerLayers.push(...addFlightArc(data.passenger_route.path, { color: "#38bdf8", weight: 3 }));
     optimizerLayers.push(...addFlightArc(data.profit_route.path, { color: "#f59e0b", weight: 4, dashed: true }));
+    const destLon = unwrapLon(dest.lon, orig.lon);
     optimizerLayers.push(addSonarPing(orig.lat, orig.lon, { label: originVal, popup: `<b>${originVal}</b><br>${orig.name}` }));
-    optimizerLayers.push(addSonarPing(dest.lat, dest.lon, { label: destVal, emerald: true, popup: `<b>${destVal}</b><br>${dest.name}` }));
+    optimizerLayers.push(addSonarPing(dest.lat, destLon, { label: destVal, emerald: true, popup: `<b>${destVal}</b><br>${dest.name}` }));
 
     const group = L.featureGroup(optimizerLayers.filter((l) => l instanceof L.Path || l instanceof L.Marker));
     map.flyToBounds(group.getBounds(), { ...hudPadding(), duration: 1.1 });
@@ -430,10 +460,11 @@ function plotMarketResults(columns, rows) {
             const dest = resolveAirport(row[destIdx]);
             if (!orig || !dest) return;
             const color = isTop ? "#10b981" : "#38bdf8";
+            const destLon = unwrapLon(dest.lon, orig.lon);
             marketLayers.push(...addFlightArc(greatCirclePath([orig.lat, orig.lon], [dest.lat, dest.lon]), { color, weight: isTop ? 4 : 2.5 }));
             marketLayers.push(addSonarPing(orig.lat, orig.lon, { label: row[originIdx], emerald: isTop, popup: `<b>${row[originIdx]}</b><br>${orig.name}` }));
-            marketLayers.push(addSonarPing(dest.lat, dest.lon, { label: row[destIdx], emerald: isTop, popup: `<b>${row[destIdx]}</b><br>${dest.name}` }));
-            markerBounds.push([orig.lat, orig.lon], [dest.lat, dest.lon]);
+            marketLayers.push(addSonarPing(dest.lat, destLon, { label: row[destIdx], emerald: isTop, popup: `<b>${row[destIdx]}</b><br>${dest.name}` }));
+            markerBounds.push([orig.lat, orig.lon], [dest.lat, destLon]);
         } else if (codeIdx >= 0) {
             const airport = resolveAirport(row[codeIdx]);
             if (!airport) return;
