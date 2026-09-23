@@ -3,66 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#0F172A">
     <title>VolareVision - Route Optimization Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Design tokens: see design-system/volarevision/ (generated with the ui-ux-pro-max skill) -->
+    <style type="text/tailwindcss">
+        @theme {
+            --font-sans: "Fira Sans", ui-sans-serif, system-ui, sans-serif;
+            --font-mono: "Fira Code", ui-monospace, monospace;
+
+            --color-background: #0F172A;
+            --color-surface: #192134;
+            --color-field: #10182B;
+            --color-field-border: #3B4A63;
+            --color-hairline: rgb(255 255 255 / 0.08);
+            --color-foreground: #F8FAFC;
+            --color-muted: #94A3B8;
+            --color-primary: #2563EB;
+            --color-primary-hover: #1D4ED8;
+            --color-on-primary: #FFFFFF;
+            --color-ring: #60A5FA;
+            --color-danger: #F87171;
+
+            --color-route-fuel: #22C55E;
+            --color-route-pax: #3B82F6;
+            --color-route-profit: #F97316;
+        }
+    </style>
     <style>
         html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; }
-        .sidebar { z-index: 1000; }
+        .leaflet-container { background: #0F172A; font-family: "Fira Sans", system-ui, sans-serif; }
+        .panel { z-index: 1000; }
 
-        /* Target Leaflet SVG path markers for smooth cinematic scaling transformations */
         .leaflet-interactive {
-            transition: r 0.4s cubic-bezier(0.25, 1, 0.5, 1), 
-                        stroke 0.3s ease, 
-                        stroke-width 0.3s ease, 
-                        fill-opacity 0.3s ease !important;
+            transition: r 0.25s ease-out, stroke 0.2s ease, stroke-width 0.2s ease, fill-opacity 0.2s ease;
         }
 
-        /* Dynamic tracing stroke keyframes for flight lines */
-        @keyframes dynamicTrace {
-            to {
-                stroke-dashoffset: 0;
+        /* Route lines fade in once drawn */
+        @keyframes routeIn { from { opacity: 0; } to { opacity: 1; } }
+        .route-line { animation: routeIn 0.4s ease-out both; }
+
+        /* Visible keyboard focus everywhere */
+        :where(a, button, input, select, [tabindex]):focus-visible {
+            outline: 2px solid #60A5FA;
+            outline-offset: 2px;
+        }
+
+        .field[aria-invalid="true"] { border-color: #F87171; }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { animation: spin 0.8s linear infinite; }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
             }
-        }
-
-        .animated-flight-line {
-            animation: dynamicTrace 2.5s cubic-bezier(0.35, 1, 0.4, 1) forwards;
         }
     </style>
 </head>
-<body class="bg-gray-900 font-sans text-gray-100 overflow-hidden">
+<body class="bg-background font-sans text-foreground overflow-hidden antialiased">
 
-    <div id="map" class="absolute inset-0"></div>
+    <div id="map" class="absolute inset-0" role="region" aria-label="Route map"></div>
 
-    <div class="sidebar absolute top-4 left-4 bottom-4 w-96 bg-gray-900/95 backdrop-blur-md rounded-xl p-6 shadow-2xl border border-gray-700 flex flex-col justify-between overflow-y-auto">
-        <div>
-            <div class="flex items-center space-x-3 mb-6">
-                <div class="text-indigo-400 bg-indigo-950/50 p-2 rounded-lg border border-indigo-800/40 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-airplane" viewBox="0 0 16 16">
+    <!-- Control panel: bottom sheet on mobile, floating sidebar from md up -->
+    <aside class="panel absolute inset-x-0 bottom-0 max-h-[62vh] rounded-t-2xl
+                  md:inset-x-auto md:top-4 md:left-4 md:bottom-4 md:max-h-none md:w-96 md:rounded-2xl
+                  bg-surface/95 backdrop-blur-md border border-hairline shadow-2xl overflow-y-auto overscroll-contain"
+           aria-label="Route optimization controls">
+        <div class="p-5 space-y-5">
+            <header class="flex items-center gap-3">
+                <div class="text-ring bg-primary/15 p-2 rounded-lg border border-primary/30 flex items-center justify-center" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                         <path d="M6.428 1.151C6.708.591 7.213 0 8 0s1.292.592 1.572 1.151C9.861 1.73 10 2.431 10 3v3.691l5.17 2.585a1.5 1.5 0 0 1 .83 1.342V12a.5.5 0 0 1-.582.493l-5.507-.918-.375 2.253 1.318 1.318A.5.5 0 0 1 10.5 16h-5a.5.5 0 0 1-.354-.854l1.319-1.318-.376-2.253-5.507.918A.5.5 0 0 1 0 12v-1.382a1.5 1.5 0 0 1 .83-1.342L6 6.691V3c0-.568.14-1.271.428-1.849m.894.448C7.111 2.02 7 2.569 7 3v4a.5.5 0 0 1-.276.447l-5.448 2.724a.5.5 0 0 0-.276.447v.792l5.418-.903a.5.5 0 0 1 .575.41l.5 3a.5.5 0 0 1-.14.437L6.708 15h2.586l-.647-.646a.5.5 0 0 1-.14-.436l.5-3a.5.5 0 0 1 .576-.411L15 11.41v-.792a.5.5 0 0 0-.276-.447L9.276 7.447A.5.5 0 0 1 9 7V3c0-.432-.11-.979-.322-1.401C8.458 1.159 8.213 1 8 1s-.458.158-.678.599"/>
                     </svg>
                 </div>
-                <h1 class="text-xl font-bold tracking-wide text-white">VolareVision V1.0</h1>
-            </div>
-
-            <form id="optForm" class="space-y-4">
                 <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Origin</label>
-                    <input type="text" id="origin" list="airportOptions" placeholder="Type airport code or city (e.g. JFK)..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+                    <h1 class="text-lg font-semibold leading-tight">VolareVision</h1>
+                    <p class="text-xs text-muted">Multi-objective route &amp; fare optimizer</p>
+                </div>
+            </header>
+
+            <p id="airportStatus" class="text-xs text-muted flex items-center gap-2" role="status" aria-live="polite">
+                <svg class="spinner size-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25" stroke-width="4"/><path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>
+                Loading airport database…
+            </p>
+
+            <form id="optForm" class="space-y-4" novalidate>
+                <div id="formError" class="hidden rounded-lg border border-danger/50 bg-danger/10 p-3 text-sm text-danger flex gap-2" role="alert" tabindex="-1">
+                    <svg class="size-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                    <span id="formErrorText"></span>
                 </div>
 
-                <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Destination</label>
-                    <input type="text" id="destination" list="airportOptions" placeholder="Type airport code or city (e.g. LAX)..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="origin" class="block text-xs font-medium text-muted mb-1.5">Origin</label>
+                        <input type="text" id="origin" list="airportOptions" autocomplete="off" spellcheck="false"
+                               placeholder="e.g. JFK" aria-describedby="origin-error"
+                               class="field w-full h-11 bg-field border border-field-border rounded-lg px-3 font-mono uppercase text-foreground placeholder:text-muted/70 placeholder:normal-case transition-colors duration-200 focus:border-ring focus:outline-none">
+                        <p id="origin-error" class="hidden mt-1 text-xs text-danger"></p>
+                    </div>
+                    <div>
+                        <label for="destination" class="block text-xs font-medium text-muted mb-1.5">Destination</label>
+                        <input type="text" id="destination" list="airportOptions" autocomplete="off" spellcheck="false"
+                               placeholder="e.g. LAX" aria-describedby="destination-error"
+                               class="field w-full h-11 bg-field border border-field-border rounded-lg px-3 font-mono uppercase text-foreground placeholder:text-muted/70 placeholder:normal-case transition-colors duration-200 focus:border-ring focus:outline-none">
+                        <p id="destination-error" class="hidden mt-1 text-xs text-danger"></p>
+                    </div>
                 </div>
-
                 <datalist id="airportOptions"></datalist>
 
                 <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Aircraft Fleet Type</label>
-                    <select id="aircraft_type" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500">
-                        <optgroup label="Narrowbody Fleet (Short-Medium Haul)">
+                    <label for="aircraft_type" class="block text-xs font-medium text-muted mb-1.5">Aircraft</label>
+                    <select id="aircraft_type" class="w-full h-11 bg-field border border-field-border rounded-lg px-3 text-foreground cursor-pointer transition-colors duration-200 focus:border-ring focus:outline-none">
+                        <optgroup label="Narrowbody (short–medium haul)">
                             <option value="b738">Boeing 737-800</option>
                             <option value="a20n">Airbus A320neo</option>
                             <option value="a21n">Airbus A321neo</option>
@@ -74,7 +135,7 @@
                             <option value="e295">Embraer E195-E2</option>
                             <option value="a19n">Airbus A319neo</option>
                         </optgroup>
-                        <optgroup label="Widebody Fleet (Long Haul Heavy)">
+                        <optgroup label="Widebody (long haul)">
                             <option value="b77w" selected>Boeing 777-300ER</option>
                             <option value="b789">Boeing 787-9 Dreamliner</option>
                             <option value="a359">Airbus A350-900</option>
@@ -84,91 +145,57 @@
                             <option value="a339">Airbus A330-900neo</option>
                             <option value="b772">Boeing 777-200ER</option>
                             <option value="a388">Airbus A380-800</option>
-                            <option value="b748">Boeing 747-8I Queen</option>
+                            <option value="b748">Boeing 747-8I</option>
                         </optgroup>
                     </select>
                 </div>
-                <div class="grid grid-cols-2 gap-2">
+
+                <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Fuel Price ($/gal)</label>
-                        <input type="number" id="fuel_price" value="3.50" step="0.1" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500">
+                        <label for="fuel_price" class="block text-xs font-medium text-muted mb-1.5">Fuel price <span class="text-muted/80">($/gal)</span></label>
+                        <input type="number" id="fuel_price" value="3.50" step="0.1" min="0" inputmode="decimal" aria-describedby="fuel_price-error"
+                               class="field w-full h-11 bg-field border border-field-border rounded-lg px-3 font-mono text-foreground transition-colors duration-200 focus:border-ring focus:outline-none">
+                        <p id="fuel_price-error" class="hidden mt-1 text-xs text-danger"></p>
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Avg Ticket Price ($)</label>
-                        <input type="number" id="ticket_price" value="450" step="10" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500">
+                        <label for="ticket_price" class="block text-xs font-medium text-muted mb-1.5">Avg ticket <span class="text-muted/80">($)</span></label>
+                        <input type="number" id="ticket_price" value="450" step="10" min="1" inputmode="decimal" aria-describedby="ticket_price-error"
+                               class="field w-full h-11 bg-field border border-field-border rounded-lg px-3 font-mono text-foreground transition-colors duration-200 focus:border-ring focus:outline-none">
+                        <p id="ticket_price-error" class="hidden mt-1 text-xs text-danger"></p>
                     </div>
                 </div>
+
                 <div>
-                    <div class="flex justify-between text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                        <span>Passenger Demand Scale</span>
-                        <span id="demandVal">1.0x</span>
+                    <div class="flex justify-between items-baseline mb-1.5">
+                        <label for="passenger_demand" class="text-xs font-medium text-muted">Passenger demand</label>
+                        <output id="demandVal" for="passenger_demand" class="font-mono text-sm text-foreground">1.0×</output>
                     </div>
-                    <input type="range" id="passenger_demand" min="0.5" max="1.5" step="0.1" value="1.0" class="w-full accent-indigo-500">
+                    <input type="range" id="passenger_demand" min="0.5" max="1.5" step="0.1" value="1.0" class="w-full h-6 accent-primary cursor-pointer">
+                    <div class="flex justify-between text-xs text-muted mt-0.5" aria-hidden="true"><span>0.5×</span><span>1.5×</span></div>
                 </div>
-                
-                <div class="grid grid-cols-3 gap-2 pt-2">
-                    <button type="submit" class="col-span-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 px-4 rounded-lg transition duration-200 shadow-lg shadow-indigo-600/30 cursor-pointer text-sm">
-                        Optimize
+
+                <div class="grid grid-cols-3 gap-2 pt-1">
+                    <button type="submit" id="optimizeBtn"
+                            class="col-span-2 h-11 inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-hover text-on-primary font-medium rounded-lg transition-colors duration-200 cursor-pointer disabled:opacity-70 disabled:cursor-wait">
+                        <svg id="optimizeSpinner" class="spinner size-4 hidden" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.3" stroke-width="4"/><path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>
+                        <span id="optimizeLabel">Optimize routes</span>
                     </button>
-                    <button type="button" id="resetBtn" class="col-span-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium py-2.5 px-2 rounded-lg transition duration-200 border border-gray-700 cursor-pointer text-sm">
+                    <button type="button" id="resetBtn"
+                            class="h-11 bg-transparent hover:bg-white/5 text-foreground font-medium rounded-lg border border-field-border transition-colors duration-200 cursor-pointer">
                         Reset
                     </button>
                 </div>
             </form>
+
+            <section id="resultsMatrix" class="hidden pt-5 border-t border-hairline space-y-3" aria-labelledby="results-title" aria-live="polite">
+                <div class="flex items-baseline justify-between">
+                    <h2 id="results-title" class="text-sm font-semibold">Route options</h2>
+                    <p id="resultsRoute" class="font-mono text-xs text-muted"></p>
+                </div>
+                <div id="resultCards" class="space-y-3"></div>
+            </section>
         </div>
-
-        <div id="resultsMatrix" class="mt-6 pt-6 border-t border-gray-800 space-y-4 hidden">
-            <h3 class="text-sm font-bold uppercase tracking-wider text-gray-300">Multi-Objective Solutions</h3>
-            
-            <div class="p-3 bg-green-950/40 border border-green-800/60 rounded-xl">
-                <div class="flex justify-between items-center mb-1">
-                    <span class="text-xs font-bold text-green-400 uppercase">1. Fuel Efficiency Route</span>
-                    <span class="w-3 h-3 rounded-full bg-green-500"></span>
-                </div>
-                <div class="text-[11px] text-green-300/80 mb-1 font-medium">
-                    Suggested Fare: <span class="text-white font-bold" id="fuel-fare"></span>
-                </div>
-                <div class="grid grid-cols-3 text-center text-xs text-gray-300 gap-1 mt-2">
-                    <div><p class="text-gray-500">Dist</p><span id="fuel-dist"></span> NM</div>
-                    <div><p class="text-gray-500">Burn</p><span id="fuel-burn"></span> G</div>
-                    <div><p class="text-gray-500">Net</p><span class="text-green-400 font-bold" id="fuel-prof"></span></div>
-                </div>
-                <p class="text-[10px] text-gray-400 mt-2 italic leading-tight" id="fuel-desc"></p>
-            </div>
-
-            <div class="p-3 bg-blue-950/40 border border-blue-800/60 rounded-xl">
-                <div class="flex justify-between items-center mb-1">
-                    <span class="text-xs font-bold text-blue-400 uppercase">2. High-Load Transit Route</span>
-                    <span class="w-3 h-3 rounded-full bg-blue-500"></span>
-                </div>
-                <div class="text-[11px] text-blue-300/80 mb-1 font-medium">
-                    Suggested Fare: <span class="text-white font-bold" id="pax-fare"></span>
-                </div>
-                <div class="grid grid-cols-3 text-center text-xs text-gray-300 gap-1 mt-2">
-                    <div><p class="text-gray-500">Dist</p><span id="pax-dist"></span> NM</div>
-                    <div><p class="text-gray-500">Pax</p><span id="pax-pax"></span></div>
-                    <div><p class="text-gray-500">Net</p><span class="text-blue-400 font-bold" id="pax-prof"></span></div>
-                </div>
-                <p class="text-[10px] text-gray-400 mt-2 italic leading-tight" id="pax-desc"></p>
-            </div>
-
-            <div class="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl">
-                <div class="flex justify-between items-center mb-1">
-                    <span class="text-xs font-bold text-amber-400 uppercase">3. Max Profit Strategy</span>
-                    <span class="w-3 h-3 rounded-full bg-amber-500"></span>
-                </div>
-                <div class="text-[11px] text-amber-300/80 mb-1 font-medium">
-                    Suggested Fare: <span class="text-white font-bold" id="prof-fare"></span>
-                </div>
-                <div class="grid grid-cols-3 text-center text-xs text-gray-300 gap-1 mt-2">
-                    <div><p class="text-gray-500">Dist</p><span id="prof-dist"></span> NM</div>
-                    <div><p class="text-gray-500">Burn</p><span id="prof-burn"></span> G</div>
-                    <div><p class="text-gray-500">Net Profit</p><span class="text-amber-400 font-bold" id="prof-prof"></span></div>
-                </div>
-                <p class="text-[10px] text-gray-400 mt-2 italic leading-tight" id="prof-desc"></p>
-            </div>
-        </div>
-    </div>
+    </aside>
 
     <script src="./app.js"></script>
 </body>
