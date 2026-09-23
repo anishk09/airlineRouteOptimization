@@ -11,6 +11,8 @@
 }
 
 html, body, #map {
+  background: #242424 !important;
+
     height: 100%;
     width: 100%;
     margin: 0;
@@ -22,6 +24,8 @@ body {
 }
 
 #map {
+  background: #242424 !important;
+
     position: absolute;
     inset: 0;
 }

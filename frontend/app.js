@@ -51,14 +51,14 @@ function initMap() {
         zoom: 3,
         zoomControl: false,
         worldCopyJump: true,
-        minZoom: 2.2,
-        maxBounds: [[-85, -190], [85, 190]],
+        minZoom: 2.5,
+        maxBounds: [[-85, -540], [85, 540]],
         maxBoundsViscosity: 1.0,
     });
     L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
         attribution: "&copy; OpenStreetMap &copy; CARTO",
         subdomains: "abcd",
-        minZoom: 2.2,
+        minZoom: 2.5,
         maxZoom: 18,
     }).addTo(map);
     L.control.zoom({ position: "bottomright" }).addTo(map);
