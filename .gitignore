@@ -7,3 +7,19 @@ __pycache__/
 airports_raw.csv
 .vercel
 .env*
+
+# Data & CSV files
+backend/data/
+backend/*.csv
+backend/*.dat
+*.csv
+
+# V1 backup & node artifacts
+backend_v1/
+backend/node_modules/
+backend/package-lock.json
+
+# Environment files
+backend/.env
+backend/.env*
+backend/.neon

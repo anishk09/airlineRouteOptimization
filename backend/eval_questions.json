@@ -1,0 +1,22 @@
+[
+  {
+    "question": "Which 5 routes carried the most passengers in 2019?",
+    "gold_sql": "SELECT origin, dest, sum(passengers) AS passengers FROM flights.route_year WHERE year = 2019 GROUP BY origin, dest ORDER BY passengers DESC LIMIT 5"
+  },
+  {
+    "question": "How many distinct routes did Southwest (WN) fly in 2019 vs 2021?",
+    "gold_sql": "SELECT year, count(*) AS routes FROM flights.route_year WHERE carrier = 'WN' AND year IN (2019, 2021) AND departures > 0 GROUP BY year ORDER BY year"
+  },
+  {
+    "question": "What was the total passenger count out of EWR in 2020?",
+    "gold_sql": "SELECT sum(passengers) AS passengers FROM flights.route_year WHERE origin = 'EWR' AND year = 2020"
+  },
+  {
+    "question": "What's the easternmost airport in Indonesia?",
+    "gold_sql": "SELECT code FROM flights.airports WHERE country = 'Indonesia' ORDER BY lon DESC LIMIT 1"
+  },
+  {
+    "question": "What is the southernmost airport?",
+    "gold_sql": "SELECT code FROM flights.airports ORDER BY lat ASC LIMIT 1"
+  }
+]
